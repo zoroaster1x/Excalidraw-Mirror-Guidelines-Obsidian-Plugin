@@ -48,7 +48,7 @@ Repeat this for each vault where you want the plugin.
 The plugin must live in this exact folder:
 
 ```
-<YourVault>/.obsidian/plugins/excalidraw-mirror-plugin/
+<YourVault>/.obsidian/plugins/excalidraw-mirror/
 ```
 
 The simplest ways to get it there:
@@ -60,13 +60,13 @@ cd Excalidraw-Mirror-Guidelines-Obsidian-Plugin
 ./install.sh /path/to/YourVault
 ```
 
-The script builds the plugin with npm when npm is available, falls back to the prebuilt `main.js` when it is not, and then copies the plugin files into `<YourVault>/.obsidian/plugins/excalidraw-mirror-plugin/`.
+The script builds the plugin with npm when npm is available, falls back to the prebuilt `main.js` when it is not, and then copies the plugin files into `<YourVault>/.obsidian/plugins/excalidraw-mirror/`.
 
 **Option B: copy the files manually (no build tools needed)**
 
 This repo includes a prebuilt `main.js`, so you can skip compilation entirely.
 
-1. Create the folder `<YourVault>/.obsidian/plugins/excalidraw-mirror-plugin/`.
+1. Create the folder `<YourVault>/.obsidian/plugins/excalidraw-mirror/`.
 2. Copy these files into it:
    - `main.js`
    - `manifest.json`
@@ -86,7 +86,7 @@ Then copy `main.js`, `manifest.json`, `styles.css` and `versions.json` into the 
 
 1. Settings -> Community plugins -> Installed plugins.
 2. Click the reload icon next to "Installed plugins" if the plugin is not listed yet.
-3. Turn on **Excalidraw Mirror Plugin**.
+3. Turn on **Excalidraw Mirror**.
 
 Make sure the Excalidraw plugin is enabled too. The first time both are loaded, open an Excalidraw drawing to see the plugin working.
 
@@ -128,7 +128,7 @@ Hit testing understands the shapes: strokes and lines are tested against their p
 
 ## Undo behavior
 
-Settings -> Excalidraw Mirror Plugin -> Undo behavior:
+Settings -> Excalidraw Mirror -> Undo behavior:
 
 - **Remove both (default):** Ctrl+Z removes the stroke and its mirrored copies together, in one step.
 - **Remove mirrored copy first:** Ctrl+Z removes only the mirrored copies first. Pressing Ctrl+Z again removes the original stroke.
@@ -198,7 +198,7 @@ If you prefer not to bundle, `src/main.js` is valid CommonJS on its own. `instal
 
 ## Troubleshooting
 
-- **The menu entries are not under Laser pointer:** Excalidraw's menu markup can change between versions. Use the commands under Settings -> Hotkeys as a fallback, and check the developer console for the message "Excalidraw Mirror Plugin: added Mirror guide actions to Excalidraw's menu".
+- **The menu entries are not under Laser pointer:** Excalidraw's menu markup can change between versions. Use the commands under Settings -> Hotkeys as a fallback, and check the developer console for the message "Excalidraw Mirror: added Mirror guide actions to Excalidraw's menu".
 - **No guide appears:** make sure the plugin is enabled, the vault is not in Restricted mode, and the Excalidraw plugin is enabled. Use the ribbon icon or the command to add a guide.
 - **Ctrl+Click does nothing:** the selection tool must be active and at least one guide must exist.
 - **Menu items disappear after an Excalidraw update:** update this plugin, or use the commands.

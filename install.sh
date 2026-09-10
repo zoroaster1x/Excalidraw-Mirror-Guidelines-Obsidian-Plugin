@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs the Excalidraw Mirror Plugin into an Obsidian vault.
+# Installs the Excalidraw Mirror into an Obsidian vault.
 #
 # Usage:
 #   ./install.sh /path/to/YourVault
@@ -51,7 +51,7 @@ if [ ! -f main.js ]; then
 	exit 1
 fi
 
-DEST="$VAULT/.obsidian/plugins/excalidraw-mirror-plugin"
+DEST="$VAULT/.obsidian/plugins/excalidraw-mirror"
 mkdir -p "$DEST"
 cp main.js manifest.json styles.css "$DEST/"
 if [ -f versions.json ]; then
@@ -59,10 +59,10 @@ if [ -f versions.json ]; then
 fi
 
 echo
-echo "Installed Excalidraw Mirror Plugin to:"
+echo "Installed Excalidraw Mirror to:"
 echo "  $DEST"
 echo
 echo "Next steps in Obsidian:"
 echo "  1. Settings -> Community plugins -> make sure Restricted mode is off."
 echo "  2. Click the reload icon next to Installed plugins."
-echo "  3. Enable 'Excalidraw Mirror Plugin'."
+echo "  3. Enable 'Excalidraw Mirror'."

@@ -416,7 +416,7 @@ class ExcalidrawMirrorPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.syncViews()));
     this.app.workspace.onLayoutReady(() => {
       if (!this.getExcalidrawPlugin()) {
-        new Notice("Excalidraw Mirror Plugin requires the Excalidraw plugin. Install and enable it to mirror drawings.");
+        new Notice("Excalidraw Mirror requires the Excalidraw plugin. Install and enable it to mirror drawings.");
       }
       this.installLiveHook();
       this.syncViews();
@@ -477,7 +477,7 @@ class ExcalidrawMirrorPlugin extends Plugin {
 
   getCommandTarget(view) {
     const target = view || this.getActiveExcalidrawView();
-    if (!target) new Notice("Excalidraw Mirror Plugin: open an Excalidraw drawing first.");
+    if (!target) new Notice("Excalidraw Mirror: open an Excalidraw drawing first.");
     return target;
   }
 
@@ -757,7 +757,7 @@ class ExcalidrawMirrorPlugin extends Plugin {
   rotateGuides(view, degrees) {
     const guides = this.findGuides(view);
     if (!guides.length) {
-      new Notice("Excalidraw Mirror Plugin: add a mirror guide first.");
+      new Notice("Excalidraw Mirror: add a mirror guide first.");
       return;
     }
     const centers = guides.map(guideCenter);
@@ -775,7 +775,7 @@ class ExcalidrawMirrorPlugin extends Plugin {
   resetGuidesVertical(view) {
     const guides = this.findGuides(view);
     if (!guides.length) {
-      new Notice("Excalidraw Mirror Plugin: add a mirror guide first.");
+      new Notice("Excalidraw Mirror: add a mirror guide first.");
       return;
     }
     this.writeGuides(view, guides.map((g) => this.setGuideAngle(g, Math.PI / 2)));
@@ -784,12 +784,12 @@ class ExcalidrawMirrorPlugin extends Plugin {
   centerGuidesOnSelection(view) {
     const guides = this.findGuides(view);
     if (!guides.length) {
-      new Notice("Excalidraw Mirror Plugin: add a mirror guide first.");
+      new Notice("Excalidraw Mirror: add a mirror guide first.");
       return;
     }
     const selection = this.getMirrorableSelection(view);
     if (!selection.length) {
-      new Notice("Excalidraw Mirror Plugin: select the elements to center the guide on.");
+      new Notice("Excalidraw Mirror: select the elements to center the guide on.");
       return;
     }
     const bounds = getBoundingBox(selection);
@@ -931,7 +931,7 @@ class ExcalidrawMirrorPlugin extends Plugin {
           try {
             previous.callback(elements, appState, files, view);
           } catch (e) {
-            console.error("Excalidraw Mirror Plugin: previous scene hook failed", e);
+            console.error("Excalidraw Mirror: previous scene hook failed", e);
           }
         }
         owner.onSceneChange(elements, appState, files, view);
@@ -1059,7 +1059,7 @@ class ExcalidrawMirrorPlugin extends Plugin {
         if (sceneUpdates.size) next = next.map((el) => sceneUpdates.get(el.id) || el);
         this.writeScene(view, next, capture);
       } catch (e) {
-        console.error("Excalidraw Mirror Plugin: live update failed", e);
+        console.error("Excalidraw Mirror: live update failed", e);
       } finally {
         state.busy = false;
       }
@@ -1389,7 +1389,7 @@ class ExcalidrawMirrorPlugin extends Plugin {
       else menu.appendChild(item);
       ref = item;
     }
-    console.log("Excalidraw Mirror Plugin: added Mirror guide actions to Excalidraw's menu");
+    console.log("Excalidraw Mirror: added Mirror guide actions to Excalidraw's menu");
   }
   cloneMenuItem(anchor, entry, doc) {
     const item = anchor.cloneNode(true);
@@ -1432,7 +1432,7 @@ class ExcalidrawMirrorPlugin extends Plugin {
       try {
         entry.action();
       } catch (e) {
-        console.error("Excalidraw Mirror Plugin: menu action failed", e);
+        console.error("Excalidraw Mirror: menu action failed", e);
       }
     });
     return item;
