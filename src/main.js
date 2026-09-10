@@ -25,7 +25,7 @@
 "use strict";
 
 const obsidian = require("obsidian");
-const { Plugin, PluginSettingTab, Setting, Notice } = obsidian;
+const { Plugin, PluginSettingTab, Setting, Notice, Menu } = obsidian;
 
 const EXCALIDRAW_PLUGIN_ID = "obsidian-excalidraw-plugin";
 const VIEW_TYPE_EXCALIDRAW = "excalidraw";
@@ -363,11 +363,12 @@ const ICON_MIRROR =
 class ExcalidrawMirrorPlugin extends Plugin {
   constructor(app, manifest) {
     super(app, manifest);
-    this.settings = { showToolbar: false, menuIntegration: true, undoMode: "both" };
+    this.settings = { showToolbar: false, menuIntegration: true, undoMode: "both", guideContextMenu: true };
     this.viewStates = new Map();
     this.toolbars = new Map();
     this.menuObservers = new Map();
     this.ctrlClickHandlers = new Map();
+    this.keyHandlers = new Map();
     this.liveHookOwner = null;
     this.previousLiveHook = null;
   }
@@ -411,6 +412,11 @@ class ExcalidrawMirrorPlugin extends Plugin {
       name: "Mirror guide: reset to vertical",
       callback: () => this.cmdResetGuide(),
     });
+    this.addCommand({
+      id: "remove-selected-guide",
+      name: "Mirror guide: remove selected guide",
+      callback: () => this.cmdRemoveSelectedGuide(),
+    });
 
     this.registerEvent(this.app.workspace.on("layout-change", () => this.syncViews()));
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.syncViews()));
@@ -432,6 +438,14 @@ class ExcalidrawMirrorPlugin extends Plugin {
       if (host && host.removeEventListener) host.removeEventListener("pointerdown", handler, true);
     }
     this.ctrlClickHandlers.clear();
+    for (const rec of this.keyHandlers.values()) {
+      try {
+        rec.doc.removeEventListener("keydown", rec.handler, true);
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    this.keyHandlers.clear();
     for (const state of this.viewStates.values()) {
       if (state.commitTimer) clearTimeout(state.commitTimer);
       if (state.overlay && state.overlay.canvas) state.overlay.canvas.remove();
@@ -453,7 +467,10 @@ class ExcalidrawMirrorPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({ showToolbar: false, menuIntegration: true, undoMode: "both" }, await this.loadData());
+    this.settings = Object.assign(
+      { showToolbar: false, menuIntegration: true, undoMode: "both", guideContextMenu: true },
+      await this.loadData()
+    );
   }
   async saveSettings() {
     await this.saveData(this.settings);
@@ -486,6 +503,7 @@ class ExcalidrawMirrorPlugin extends Plugin {
     let state = this.viewStates.get(key);
     if (!state) {
       state = {
+        selectedGuideId: null,
         knownIds: new Set(),
         initialized: false,
         tracked: new Map(),
@@ -566,10 +584,11 @@ class ExcalidrawMirrorPlugin extends Plugin {
 
   // Guides
 
-  makeGuide(cx, cy, angleDeg) {
+  makeGuide(cx, cy, angleDeg, length) {
     const rad = ((angleDeg == null ? 90 : angleDeg) * Math.PI) / 180;
-    const dx = Math.cos(rad) * GUIDE_ANCHOR_LENGTH;
-    const dy = Math.sin(rad) * GUIDE_ANCHOR_LENGTH;
+    const anchor = length && length > 0 ? length : GUIDE_ANCHOR_LENGTH;
+    const dx = Math.cos(rad) * anchor;
+    const dy = Math.sin(rad) * anchor;
     return {
       id: randomId(),
       type: "line",
@@ -688,6 +707,7 @@ class ExcalidrawMirrorPlugin extends Plugin {
     const guides = this.findGuides(view);
     let cx;
     let cy;
+    let length = GUIDE_ANCHOR_LENGTH;
     if (guides.length) {
       const centers = guides.map(guideCenter);
       cx = centers.reduce((s, c) => s + c.x, 0) / centers.length;
@@ -696,13 +716,14 @@ class ExcalidrawMirrorPlugin extends Plugin {
       const bounds = getBoundingBox(selection);
       cx = bounds.cx;
       cy = bounds.cy;
+      length = Math.max(240, Math.hypot(bounds.width, bounds.height) + 120);
     } else {
       const appState = view.excalidrawAPI.getAppState() || {};
       const zoom = (appState.zoom && appState.zoom.value) || 1;
       cx = -(appState.scrollX || 0) + (appState.width || 900) / zoom / 2;
       cy = -(appState.scrollY || 0) + (appState.height || 700) / zoom / 2;
     }
-    const guide = this.makeGuide(cx, cy, angleDeg == null ? 90 : angleDeg);
+    const guide = this.makeGuide(cx, cy, angleDeg == null ? 90 : angleDeg, length);
     const label = this.makeGuideLabel(guide, guides.length);
     const scene = view.excalidrawAPI.getSceneElements().slice();
     this.writeScene(view, scene.concat([guide, label]));
@@ -710,8 +731,10 @@ class ExcalidrawMirrorPlugin extends Plugin {
   }
 
   removeAllGuides(view) {
+    const state = this.getState(view);
     const scene = view.excalidrawAPI.getSceneElements().slice();
     const next = scene.filter((el) => !isMirrorGuide(el) && !isGuideLabel(el));
+    state.selectedGuideId = null;
     if (next.length !== scene.length) this.writeScene(view, next);
   }
 
@@ -726,11 +749,11 @@ class ExcalidrawMirrorPlugin extends Plugin {
     });
   }
 
-  setGuideAngle(guide, angleRad) {
+  setGuideAngle(guide, angleRad, length) {
     const center = guideCenter(guide);
-    const length = Math.max(240, center.length);
-    const dx = Math.cos(angleRad) * length;
-    const dy = Math.sin(angleRad) * length;
+    const guideLength = Math.max(240, length == null ? center.length : length);
+    const dx = Math.cos(angleRad) * guideLength;
+    const dy = Math.sin(angleRad) * guideLength;
     return Object.assign({}, guide, {
       x: center.x - dx / 2,
       y: center.y - dy / 2,
@@ -786,9 +809,11 @@ class ExcalidrawMirrorPlugin extends Plugin {
     const centers = guides.map(guideCenter);
     const cx = centers.reduce((s, c) => s + c.x, 0) / centers.length;
     const cy = centers.reduce((s, c) => s + c.y, 0) / centers.length;
+    const targetLength = Math.max(240, Math.hypot(bounds.width, bounds.height) + 120);
     const moved = guides.map((g) => {
       const center = guideCenter(g);
-      return this.shiftGuide(g, { x: center.x + (bounds.cx - cx), y: center.y + (bounds.cy - cy) });
+      const shifted = this.shiftGuide(g, { x: center.x + (bounds.cx - cx), y: center.y + (bounds.cy - cy) });
+      return this.setGuideAngle(shifted, center.angle, Math.max(center.length, targetLength));
     });
     this.writeGuides(view, moved);
   }
@@ -852,9 +877,24 @@ class ExcalidrawMirrorPlugin extends Plugin {
     const handler = (evt) => this.onHostPointerDown(view, evt);
     host.addEventListener("pointerdown", handler, true);
     this.ctrlClickHandlers.set(view, handler);
+    const doc = host.ownerDocument || (typeof document !== "undefined" ? document : null);
+    if (doc && !this.keyHandlers.has(view)) {
+      const keyHandler = (evt) => this.onDocumentKeyDown(view, evt);
+      doc.addEventListener("keydown", keyHandler, true);
+      this.keyHandlers.set(view, { doc, handler: keyHandler });
+    }
   }
 
   onHostPointerDown(view, evt) {
+    const target = evt.target;
+    const onGuideUI = target && target.closest && target.closest(".emp-guide-hit, .emp-guide-handle");
+    if (!onGuideUI) {
+      const state = this.getState(view);
+      if (state.selectedGuideId) {
+        state.selectedGuideId = null;
+        this.refreshGuideHighlight(view, state);
+      }
+    }
     if (!(evt.ctrlKey || evt.metaKey) || evt.button !== 0) return;
     const appState = view.excalidrawAPI.getAppState() || {};
     const tool = appState.activeTool && appState.activeTool.type;
@@ -1190,10 +1230,11 @@ class ExcalidrawMirrorPlugin extends Plugin {
       const sy = ty(center.y);
       const dx = Math.cos(center.angle);
       const dy = Math.sin(center.angle);
+      const selected = state.selectedGuideId === guide.id;
       ctx.save();
       ctx.setLineDash([10, 8]);
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = selected ? 3 : 2;
       ctx.beginPath();
       ctx.moveTo(sx - dx * diag, sy - dy * diag);
       ctx.lineTo(sx + dx * diag, sy + dy * diag);
@@ -1203,8 +1244,9 @@ class ExcalidrawMirrorPlugin extends Plugin {
       ctx.arc(sx, sy, 4.5, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
-      const hx = sx + dx * 64;
-      const hy = sy + dy * 64;
+      const handleOffset = this.findHandleOffset(guides, guide, center, zoom);
+      const hx = sx + dx * handleOffset;
+      const hy = sy + dy * handleOffset;
       ctx.beginPath();
       ctx.arc(hx, hy, 6.5, 0, Math.PI * 2);
       ctx.fillStyle = dark ? "#1e1e1e" : "#ffffff";
@@ -1245,6 +1287,15 @@ class ExcalidrawMirrorPlugin extends Plugin {
         handle.className = "emp-guide-handle";
         hit.addEventListener("pointerdown", (evt) => this.startGuideMove(view, h.guideId, evt));
         handle.addEventListener("pointerdown", (evt) => this.startGuideRotate(view, h.guideId, evt));
+        hit.addEventListener("contextmenu", (evt) => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          if (!this.settings.guideContextMenu) return;
+          const st = this.getState(view);
+          st.selectedGuideId = h.guideId;
+          this.refreshGuideHighlight(view, st);
+          this.showGuideContextMenu(view, h.guideId, evt);
+        });
         host.appendChild(hit);
         host.appendChild(handle);
         rec = { hit, handle };
@@ -1270,30 +1321,136 @@ class ExcalidrawMirrorPlugin extends Plugin {
     }
   }
 
+  removeGuideById(view, guideId) {
+    const state = this.getState(view);
+    const scene = view.excalidrawAPI.getSceneElements().slice();
+    const next = scene.filter(
+      (el) => el.id !== guideId && !(isGuideLabel(el) && el.customData.excalidrawMirrorGuideLabelFor === guideId)
+    );
+    if (state.selectedGuideId === guideId) state.selectedGuideId = null;
+    if (next.length !== scene.length) this.writeScene(view, next);
+  }
+
+  rotateGuideById(view, guideId, degrees) {
+    const guide = this.findGuideById(view, guideId);
+    if (!guide) return;
+    const center = guideCenter(guide);
+    const updated = this.setGuideAngle(guide, center.angle + (degrees * Math.PI) / 180, center.length);
+    this.writeGuides(view, [updated]);
+  }
+
+  cmdRemoveSelectedGuide(view) {
+    const target = this.getCommandTarget(view);
+    if (!target) return;
+    const state = this.getState(target);
+    if (!state.selectedGuideId) {
+      new Notice("Excalidraw Mirror: click a guide first, then press Delete or run this command.");
+      return;
+    }
+    this.removeGuideById(target, state.selectedGuideId);
+  }
+
+  onDocumentKeyDown(view, evt) {
+    const state = this.getState(view);
+    if (!state.selectedGuideId) return;
+    if (evt.key === "Escape") {
+      state.selectedGuideId = null;
+      this.refreshGuideHighlight(view, state);
+      return;
+    }
+    if (evt.key !== "Delete" && evt.key !== "Backspace") return;
+    const target = evt.target;
+    if (target && target.closest && target.closest("input, textarea, [contenteditable='true']")) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    this.removeGuideById(view, state.selectedGuideId);
+  }
+
+  refreshGuideHighlight(view, state) {
+    for (const [guideId, rec] of state.guideUI) {
+      const selected = guideId === state.selectedGuideId;
+      rec.hit.classList.toggle("is-selected", selected);
+      rec.handle.classList.toggle("is-selected", selected);
+    }
+    const guides = this.findGuides(view);
+    if (guides.length) {
+      this.drawOverlay(view, state, guides, computeTransforms(guides), view.excalidrawAPI.getAppState());
+    }
+  }
+
+  findHandleOffset(guides, guide, center, zoom) {
+    const candidates = [64, -64, 110, -110, 160, -160, 32, -32];
+    const minDistance = 24 / zoom;
+    const dir = { x: Math.cos(center.angle), y: Math.sin(center.angle) };
+    for (const offset of candidates) {
+      const point = { x: center.x + dir.x * offset, y: center.y + dir.y * offset };
+      const blocked = guides.some((other) => {
+        if (other.id === guide.id) return false;
+        const otherCenter = guideCenter(other);
+        const normal = { x: -Math.sin(otherCenter.angle), y: Math.cos(otherCenter.angle) };
+        const distance = Math.abs((point.x - otherCenter.x) * normal.x + (point.y - otherCenter.y) * normal.y);
+        const centerDistance = Math.hypot(point.x - otherCenter.x, point.y - otherCenter.y);
+        return distance < minDistance || centerDistance < minDistance;
+      });
+      if (!blocked) return offset;
+    }
+    return 64;
+  }
+
+  showGuideContextMenu(view, guideId, evt) {
+    const menu = new Menu();
+    menu.addItem((item) =>
+      item.setTitle("Remove guide").setIcon("trash").onClick(() => this.removeGuideById(view, guideId))
+    );
+    menu.addSeparator();
+    menu.addItem((item) =>
+      item.setTitle("Rotate 45° clockwise").setIcon("rotate-cw").onClick(() => this.rotateGuideById(view, guideId, 45))
+    );
+    menu.addItem((item) =>
+      item.setTitle("Rotate 45° counterclockwise").setIcon("rotate-ccw").onClick(() => this.rotateGuideById(view, guideId, -45))
+    );
+    menu.addItem((item) =>
+      item.setTitle("Rotate 90°").setIcon("rotate-cw").onClick(() => this.rotateGuideById(view, guideId, 90))
+    );
+    menu.addItem((item) =>
+      item.setTitle("Reset to vertical").setIcon("align-vertical-space-around").onClick(() => {
+        const guide = this.findGuideById(view, guideId);
+        if (!guide) return;
+        const center = guideCenter(guide);
+        this.writeGuides(view, [this.setGuideAngle(guide, Math.PI / 2, center.length)]);
+      })
+    );
+    menu.addSeparator();
+    menu.addItem((item) =>
+      item.setTitle("Center on selection").setIcon("align-center").onClick(() => this.centerGuidesOnSelection(view))
+    );
+    menu.addItem((item) =>
+      item.setTitle("Add another perpendicular (90°)").setIcon("plus").onClick(() => this.cmdAddAnotherGuide(view, 90))
+    );
+    menu.addItem((item) =>
+      item.setTitle("Add another at 45°").setIcon("plus").onClick(() => this.cmdAddAnotherGuide(view, 45))
+    );
+    menu.showAtMouseEvent(evt);
+  }
+
   collectSnapOffsets(view, guideId, normal, center) {
     const elements = this.getScene(view).filter(
       (el) => el.id !== guideId && !isMirrorGuide(el) && !isGuideLabel(el) && !isMirrorClone(el)
     );
-    const points = [];
-    for (const el of elements) {
-      const minX = el.x;
-      const minY = el.y;
-      const maxX = el.x + (el.width || 0);
-      const maxY = el.y + (el.height || 0);
-      points.push({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 });
-      points.push({ x: minX, y: minY }, { x: maxX, y: minY }, { x: minX, y: maxY }, { x: maxX, y: maxY });
-    }
+    const centers = elements.map((el) => ({ x: el.x + (el.width || 0) / 2, y: el.y + (el.height || 0) / 2 }));
+    const edges = [];
     const bounds = getBoundingBox(elements);
     if (bounds) {
-      points.push(
-        { x: bounds.cx, y: bounds.cy },
+      centers.push({ x: bounds.cx, y: bounds.cy });
+      edges.push(
         { x: bounds.minX, y: bounds.minY },
         { x: bounds.maxX, y: bounds.minY },
         { x: bounds.minX, y: bounds.maxY },
         { x: bounds.maxX, y: bounds.maxY }
       );
     }
-    return points.map((point) => (point.x - center.x) * normal.x + (point.y - center.y) * normal.y);
+    const project = (point) => (point.x - center.x) * normal.x + (point.y - center.y) * normal.y;
+    return { centers: centers.map(project), edges: edges.map(project) };
   }
 
   startGuideMove(view, guideId, evt) {
@@ -1309,11 +1466,12 @@ class ExcalidrawMirrorPlugin extends Plugin {
     const snapOffsets = this.collectSnapOffsets(view, guideId, normal, center);
     const appState = view.excalidrawAPI.getAppState() || {};
     const zoom = (appState.zoom && appState.zoom.value) || 1;
-    const snapThreshold = 10 / zoom;
-    const snap = (value) => {
-      let best = snapThreshold;
-      let snapped = value;
-      for (const offset of snapOffsets) {
+    const centerThreshold = 12 / zoom;
+    const edgeThreshold = 8 / zoom;
+    const nearest = (offsets, value, threshold) => {
+      let best = threshold;
+      let snapped = null;
+      for (const offset of offsets) {
         const distance = Math.abs(offset - value);
         if (distance < best) {
           best = distance;
@@ -1322,24 +1480,36 @@ class ExcalidrawMirrorPlugin extends Plugin {
       }
       return snapped;
     };
+    const snap = (value) => {
+      const centerSnap = nearest(snapOffsets.centers, value, centerThreshold);
+      if (centerSnap !== null) return centerSnap;
+      const edgeSnap = nearest(snapOffsets.edges, value, edgeThreshold);
+      return edgeSnap === null ? value : edgeSnap;
+    };
+    let moved = false;
     const move = (e) => {
       const cur = this.clientToScene(view, e.clientX, e.clientY);
       if (!cur) return;
+      if (Math.hypot(cur.x - start.x, cur.y - start.y) > 3 / zoom) moved = true;
       let proj = (cur.x - start.x) * normal.x + (cur.y - start.y) * normal.y;
       proj = snap(proj);
       const g = this.findGuideById(view, guideId);
       if (!g) return;
-      const moved = this.shiftGuide(g, {
+      const shifted = this.shiftGuide(g, {
         x: center.x + normal.x * proj,
         y: center.y + normal.y * proj,
       });
-      this.writeGuides(view, [moved], "NEVER");
+      this.writeGuides(view, [shifted], "NEVER");
     };
     const up = () => {
       if (typeof window !== "undefined") {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
       }
+      if (moved) return;
+      const state = this.getState(view);
+      state.selectedGuideId = guideId;
+      this.refreshGuideHighlight(view, state);
     };
     if (typeof window !== "undefined") {
       window.addEventListener("pointermove", move);
@@ -1609,6 +1779,15 @@ class ExcalidrawMirrorPluginSettingTab extends PluginSettingTab {
       .setDesc("Also show a small floating Mirror button in the Excalidraw view.")
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.showToolbar).onChange((value) => this.plugin.setSetting("showToolbar", value))
+      );
+
+    new Setting(containerEl)
+      .setName("Show context menu when guide right clicked")
+      .setDesc("Right click a guide to remove it, rotate it, or center it on a selection.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.guideContextMenu)
+          .onChange((value) => this.plugin.setSetting("guideContextMenu", value))
       );
 
     new Setting(containerEl)

@@ -76,3 +76,12 @@
   touch-action: none;
   z-index: 3;
 }
+
+.emp-guide-hit.is-selected {
+  background: rgba(105, 101, 219, 0.12);
+}
+
+.emp-guide-handle.is-selected {
+  background: var(--color-primary, #6965db);
+  box-shadow: 0 0 0 2px var(--background-primary, #ffffff);
+}
