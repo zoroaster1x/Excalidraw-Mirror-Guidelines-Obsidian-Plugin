@@ -486,6 +486,8 @@ class ExcalidrawMirrorPlugin extends Plugin {
     let state = this.viewStates.get(key);
     if (!state) {
       state = {
+        knownIds: new Set(),
+        initialized: false,
         tracked: new Map(),
         groupMap: {},
         suppressed: new Map(),
@@ -548,19 +550,6 @@ class ExcalidrawMirrorPlugin extends Plugin {
   writeScene(view, elements, captureUpdate) {
     view.updateScene({ elements, appState: view.excalidrawAPI.getAppState(), captureUpdate: captureUpdate || "IMMEDIATELY" });
   }
-  selectElementsByIds(view, ids) {
-    try {
-      view.updateScene({
-        appState: Object.assign({}, view.excalidrawAPI.getAppState(), {
-          selectedElementIds: Object.fromEntries(ids.map((id) => [id, true])),
-        }),
-        captureUpdate: "NEVER",
-      });
-    } catch (e) {
-      /* ignore */
-    }
-  }
-
   clientToScene(view, clientX, clientY) {
     const host = view.excalidrawContainer;
     if (!host || !host.querySelector) return null;
@@ -604,10 +593,11 @@ class ExcalidrawMirrorPlugin extends Plugin {
       versionNonce: randomNonce(),
       updated: Date.now(),
       isDeleted: false,
+      locked: true,
       boundElements: null,
       points: [[0, 0], [dx, dy]],
       lastCommittedPoint: null,
-      customData: { excalidrawMirrorGuide: true, excalidrawMirrorGuideSince: Date.now() },
+      customData: { excalidrawMirrorGuide: true },
       index: null,
     };
   }
@@ -716,7 +706,6 @@ class ExcalidrawMirrorPlugin extends Plugin {
     const label = this.makeGuideLabel(guide, guides.length);
     const scene = view.excalidrawAPI.getSceneElements().slice();
     this.writeScene(view, scene.concat([guide, label]));
-    this.selectElementsByIds(view, [guide.id]);
     return guide;
   }
 
@@ -831,7 +820,8 @@ class ExcalidrawMirrorPlugin extends Plugin {
     const step = degrees == null ? 90 : degrees;
     const guides = this.findGuides(target);
     const last = guides[guides.length - 1];
-    this.addGuide(target, last ? guideAngleDegrees(last) + step : 90);
+    const base = last ? guideAngleDegrees(last) : 0;
+    this.addGuide(target, base + step);
     new Notice("Mirror guide added at +" + step + "°.");
   }
 
@@ -949,18 +939,34 @@ class ExcalidrawMirrorPlugin extends Plugin {
     if (state.busy) return;
 
     const alive = elements.filter((el) => !el.isDeleted);
-    const guides = alive.filter(isMirrorGuide);
+    const guides = [];
+    const duplicateGuideIds = new Set();
+    for (const guide of alive.filter(isMirrorGuide)) {
+      const center = guideCenter(guide);
+      const duplicate = guides.some((other) => {
+        const otherCenter = guideCenter(other);
+        return (
+          Math.abs(otherCenter.x - center.x) < 1 &&
+          Math.abs(otherCenter.y - center.y) < 1 &&
+          Math.abs(otherCenter.angle - center.angle) < 0.02
+        );
+      });
+      if (duplicate) duplicateGuideIds.add(guide.id);
+      else guides.push(guide);
+    }
     const transforms = computeTransforms(guides);
     const refMap = new Map(transforms.filter((t) => t.key).map((t) => [t.key, t]));
     const byId = new Map(alive.map((el) => [el.id, el]));
     const sceneUpdates = new Map();
     const deletions = new Set();
+    duplicateGuideIds.forEach((id) => deletions.add(id));
 
-    // Keep guide anchors invisible and update angle labels.
+    // Guides stay invisible and locked, labels follow them, orphan labels are removed.
     guides.forEach((guide, index) => {
-      if (guide.strokeColor !== "transparent") {
+      if (guide.strokeColor !== "transparent" || guide.locked !== true) {
         sceneUpdates.set(guide.id, Object.assign({}, guide, {
           strokeColor: "transparent",
+          locked: true,
           version: (guide.version || 1) + 1,
           versionNonce: randomNonce(),
           updated: Date.now(),
@@ -969,6 +975,12 @@ class ExcalidrawMirrorPlugin extends Plugin {
       const labelUpdate = this.labelUpdateFor(alive, guide, index);
       if (labelUpdate) sceneUpdates.set(labelUpdate.id, labelUpdate);
     });
+    const guideIds = new Set(guides.map((guide) => guide.id));
+    for (const el of alive) {
+      if (isGuideLabel(el) && !guideIds.has(el.customData.excalidrawMirrorGuideLabelFor)) {
+        deletions.add(el.id);
+      }
+    }
 
     // Reconcile existing clones (e.g. after redo) into the tracking map.
     for (const el of alive) {
@@ -1026,24 +1038,30 @@ class ExcalidrawMirrorPlugin extends Plugin {
       if (!map.size) state.tracked.delete(srcId);
     }
 
-    // Preview new strokes on the overlay, then commit them once the stroke ends.
-    if (guides.length) {
-      const since = Math.min(
-        ...guides.map((g) =>
-          typeof g.customData.excalidrawMirrorGuideSince === "number" ? g.customData.excalidrawMirrorGuideSince : g.updated
-        )
-      );
-      alive.forEach((el) => {
-        if (isMirrorGuide(el) || isGuideLabel(el) || isMirrorClone(el)) return;
-        if (state.tracked.has(el.id) || state.pending.has(el.id)) return;
-        const suppressed = state.suppressed.get(el.id);
-        if (suppressed && suppressed.size) return;
-        if (!MIRROR_TYPES.includes(el.type)) return;
-        if (el.type === "text" && el.containerId) return;
-        if (typeof el.updated === "number" && el.updated < since) return;
-        state.pending.set(el.id, el);
-      });
+    // Only new elements are mirrored. Moving an existing element must never mirror it.
+    // The first callback records what is already there, so opening a drawing does not
+    // mass-mirror it.
+    const currentIds = new Set(alive.map((el) => el.id));
+    if (!state.initialized) {
+      state.initialized = true;
+    } else {
+      for (const id of Array.from(state.knownIds)) {
+        if (!currentIds.has(id)) state.knownIds.delete(id);
+      }
+      if (guides.length) {
+        alive.forEach((el) => {
+          if (state.knownIds.has(el.id)) return;
+          if (isMirrorGuide(el) || isGuideLabel(el) || isMirrorClone(el)) return;
+          if (state.tracked.has(el.id) || state.pending.has(el.id)) return;
+          const suppressed = state.suppressed.get(el.id);
+          if (suppressed && suppressed.size) return;
+          if (!MIRROR_TYPES.includes(el.type)) return;
+          if (el.type === "text" && el.containerId) return;
+          state.pending.set(el.id, el);
+        });
+      }
     }
+    currentIds.forEach((id) => state.knownIds.add(id));
 
     this.drawOverlay(view, state, guides, transforms, appState || view.excalidrawAPI.getAppState());
     if (state.pending.size) this.scheduleCommit(view, state);
@@ -1252,6 +1270,32 @@ class ExcalidrawMirrorPlugin extends Plugin {
     }
   }
 
+  collectSnapOffsets(view, guideId, normal, center) {
+    const elements = this.getScene(view).filter(
+      (el) => el.id !== guideId && !isMirrorGuide(el) && !isGuideLabel(el) && !isMirrorClone(el)
+    );
+    const points = [];
+    for (const el of elements) {
+      const minX = el.x;
+      const minY = el.y;
+      const maxX = el.x + (el.width || 0);
+      const maxY = el.y + (el.height || 0);
+      points.push({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 });
+      points.push({ x: minX, y: minY }, { x: maxX, y: minY }, { x: minX, y: maxY }, { x: maxX, y: maxY });
+    }
+    const bounds = getBoundingBox(elements);
+    if (bounds) {
+      points.push(
+        { x: bounds.cx, y: bounds.cy },
+        { x: bounds.minX, y: bounds.minY },
+        { x: bounds.maxX, y: bounds.minY },
+        { x: bounds.minX, y: bounds.maxY },
+        { x: bounds.maxX, y: bounds.maxY }
+      );
+    }
+    return points.map((point) => (point.x - center.x) * normal.x + (point.y - center.y) * normal.y);
+  }
+
   startGuideMove(view, guideId, evt) {
     if (evt.button !== 0) return;
     evt.preventDefault();
@@ -1262,10 +1306,27 @@ class ExcalidrawMirrorPlugin extends Plugin {
     if (!start) return;
     const center = guideCenter(guide);
     const normal = { x: -Math.sin(center.angle), y: Math.cos(center.angle) };
+    const snapOffsets = this.collectSnapOffsets(view, guideId, normal, center);
+    const appState = view.excalidrawAPI.getAppState() || {};
+    const zoom = (appState.zoom && appState.zoom.value) || 1;
+    const snapThreshold = 10 / zoom;
+    const snap = (value) => {
+      let best = snapThreshold;
+      let snapped = value;
+      for (const offset of snapOffsets) {
+        const distance = Math.abs(offset - value);
+        if (distance < best) {
+          best = distance;
+          snapped = offset;
+        }
+      }
+      return snapped;
+    };
     const move = (e) => {
       const cur = this.clientToScene(view, e.clientX, e.clientY);
       if (!cur) return;
-      const proj = (cur.x - start.x) * normal.x + (cur.y - start.y) * normal.y;
+      let proj = (cur.x - start.x) * normal.x + (cur.y - start.y) * normal.y;
+      proj = snap(proj);
       const g = this.findGuideById(view, guideId);
       if (!g) return;
       const moved = this.shiftGuide(g, {
@@ -1279,8 +1340,6 @@ class ExcalidrawMirrorPlugin extends Plugin {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
       }
-      const g = this.findGuideById(view, guideId);
-      if (g) this.writeGuides(view, [g], "IMMEDIATELY");
     };
     if (typeof window !== "undefined") {
       window.addEventListener("pointermove", move);
@@ -1313,8 +1372,6 @@ class ExcalidrawMirrorPlugin extends Plugin {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
       }
-      const g = this.findGuideById(view, guideId);
-      if (g) this.writeGuides(view, [g], "IMMEDIATELY");
     };
     if (typeof window !== "undefined") {
       window.addEventListener("pointermove", move);
