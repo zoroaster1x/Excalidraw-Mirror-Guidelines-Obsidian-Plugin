@@ -1,6 +1,6 @@
 {
   "name": "excalidraw-mirror",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "Procedural mirror mode for Excalidraw: infinite draggable guides, radial symmetry, Ctrl+click mirroring, live mirrored drawing.",
   "main": "main.js",
   "author": "Zoroaster1x",

@@ -417,6 +417,16 @@ class ExcalidrawMirrorPlugin extends Plugin {
       name: "Mirror guide: remove selected guide",
       callback: () => this.cmdRemoveSelectedGuide(),
     });
+    this.addCommand({
+      id: "remove-mirrored-copies",
+      name: "Mirror guide: remove mirrored copies",
+      callback: () => this.cmdRemoveMirroredCopies(),
+    });
+    this.addCommand({
+      id: "mirror-selection-now",
+      name: "Mirror guide: mirror selection now",
+      callback: () => this.cmdMirrorSelection(),
+    });
 
     this.registerEvent(this.app.workspace.on("layout-change", () => this.syncViews()));
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.syncViews()));
@@ -825,7 +835,7 @@ class ExcalidrawMirrorPlugin extends Plugin {
     if (!target) return;
     if (this.findGuides(target).length) {
       this.removeAllGuides(target);
-      new Notice("Mirror guides removed.");
+      new Notice("Mirror guides removed. Your mirrored copies were kept; Ctrl+Z restores the guides.");
       this.updateToolbar(target);
       return;
     }
@@ -907,34 +917,59 @@ class ExcalidrawMirrorPlugin extends Plugin {
     if (!hit) return;
     evt.preventDefault();
     evt.stopPropagation();
-    this.mirrorExistingElement(view, hit);
+    this.mirrorElements(view, [hit]);
   }
 
-  mirrorExistingElement(view, src) {
+  mirrorElements(view, sources) {
     const state = this.getState(view);
-    const guides = this.findGuides(view);
-    const transforms = computeTransforms(guides).filter((t) => t.key);
-    if (!transforms.length) return;
+    const transforms = computeTransforms(this.findGuides(view)).filter((t) => t.key);
+    if (!transforms.length || !sources.length) return 0;
+    const sourceIds = new Set(sources.map((el) => el.id));
     const scene = view.excalidrawAPI.getSceneElements().slice();
-    const kept = scene.filter((el) => !(el.customData && el.customData.excalidrawMirrorOf === src.id));
+    const kept = scene.filter(
+      (el) => !(el.customData && sourceIds.has(el.customData.excalidrawMirrorOf))
+    );
     const additions = [];
-    const tracking = new Map();
-    for (const t of transforms) {
-      const twin = transformElement(src, t.matrix, state.groupMap, randomId(), t.key);
-      additions.push(twin);
-      tracking.set(t.key, { twinId: twin.id, version: src.version, versionNonce: src.versionNonce });
+    for (const src of sources) {
+      const tracking = new Map();
+      for (const t of transforms) {
+        const twin = transformElement(src, t.matrix, state.groupMap, randomId(), t.key);
+        additions.push(twin);
+        tracking.set(t.key, { twinId: twin.id, version: src.version, versionNonce: src.versionNonce });
+      }
+      state.tracked.set(src.id, tracking);
+      state.suppressed.delete(src.id);
     }
-    state.tracked.set(src.id, tracking);
-    state.suppressed.delete(src.id);
     const capture = this.settings.undoMode === "mirrorFirst" ? "IMMEDIATELY" : "NEVER";
     this.writeScene(view, kept.concat(additions), capture);
     if (view.excalidrawAPI.setToast) {
       try {
-        view.excalidrawAPI.setToast({ message: "Mirrored", duration: 1200, closable: false });
+        view.excalidrawAPI.setToast({
+          message: "Mirrored " + additions.length + " element" + (additions.length === 1 ? "" : "s"),
+          duration: 1200,
+          closable: false,
+        });
       } catch (e) {
         /* ignore */
       }
     }
+    return additions.length;
+  }
+
+  cmdMirrorSelection(view) {
+    const target = this.getCommandTarget(view);
+    if (!target) return;
+    if (!this.findGuides(target).length) {
+      new Notice("Excalidraw Mirror: add a guide first.");
+      return;
+    }
+    const selection = this.getMirrorableSelection(target);
+    if (!selection.length) {
+      new Notice("Excalidraw Mirror: select the elements you want to mirror.");
+      return;
+    }
+    this.mirrorElements(target, selection);
+    this.updateToolbar(target);
   }
 
   // Live mirror engine
@@ -1063,7 +1098,6 @@ class ExcalidrawMirrorPlugin extends Plugin {
         }
         const t = refMap.get(key);
         if (!t) {
-          deletions.add(info.twinId);
           map.delete(key);
           continue;
         }
@@ -1337,6 +1371,22 @@ class ExcalidrawMirrorPlugin extends Plugin {
     const center = guideCenter(guide);
     const updated = this.setGuideAngle(guide, center.angle + (degrees * Math.PI) / 180, center.length);
     this.writeGuides(view, [updated]);
+  }
+
+  cmdRemoveMirroredCopies(view) {
+    const target = this.getCommandTarget(view);
+    if (!target) return;
+    const state = this.getState(target);
+    const scene = target.excalidrawAPI.getSceneElements().slice();
+    const next = scene.filter((el) => !isMirrorClone(el));
+    if (next.length === scene.length) {
+      new Notice("Excalidraw Mirror: there are no mirrored copies to remove.");
+      return;
+    }
+    state.tracked.clear();
+    state.suppressed.clear();
+    this.writeScene(target, next);
+    new Notice("Mirrored copies removed. Ctrl+Z restores them.");
   }
 
   cmdRemoveSelectedGuide(view) {

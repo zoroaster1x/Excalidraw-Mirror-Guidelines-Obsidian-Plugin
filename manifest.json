@@ -1,7 +1,7 @@
 {
   "id": "excalidraw-mirror",
   "name": "Excalidraw Mirror",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "minAppVersion": "1.5.0",
   "description": "Procedural mirror mode for Excalidraw: infinite draggable guides, radial symmetry, Ctrl+click mirroring, live mirrored drawing.",
   "author": "Zoroaster1x",

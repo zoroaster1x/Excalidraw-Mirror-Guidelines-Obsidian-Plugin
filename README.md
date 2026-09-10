@@ -17,6 +17,8 @@ Excalidraw has no mirror mode of its own, and I couldn't really find a community
 - **Multiple guides and radial symmetry.** Add a second guide perpendicular to the first for 4 mirrored sectors, or at 45 degrees for up to 8 sectors. The plugin computes the full reflection group (up to 12 mirrored copies) so drawing in one sector fills the others.
 - **Ctrl+Click mirroring for existing elements.** Lets assume you were mid-project when downloading this plugin. You've already drawn a few dozen lines and don't wish to delete and then redraw them with a guide. Simple, you just add a guide and with the selection tool active, Ctrl+Click (Cmd+Click on macOS) an existing element to place mirrored copies of it on the opposite end of the guide. Clicking again refreshes them instead of stacking duplicates.
 - **Undo behavior setting.** Choose whether Ctrl+Z removes the stroke and its mirror together (default), or removes the mirrored copy first.
+- **Safe guide removal.** Removing guides never deletes your artwork. Mirrored copies stay in place until you explicitly run the remove mirrored copies command.
+- **One-shot mirroring.** The command Mirror guide: mirror selection now mirrors every selected element across the current guides, useful for existing drawings or for regenerating copies.
 - **Excalidraw menu integration.** The guide actions are added to Excalidraw's menu, just click on the 3 dots in the upper bar and you should see mirror options directly under the Laser pointer item.
 - **Commands and hotkeys.** Every action is also an Obsidian command, so you can bind hotkeys under Settings, Hotkeys.
 - **Theme aware UI.** The guide overlay, handles and labels follow the Excalidraw light or dark theme.
@@ -146,6 +148,9 @@ Search for "Mirror guide" under Settings -> Hotkeys:
 - Mirror guide: rotate 45°
 - Mirror guide: rotate 90°
 - Mirror guide: reset to vertical
+- Mirror guide: remove selected guide
+- Mirror guide: remove mirrored copies
+- Mirror guide: mirror selection now
 
 ## Settings
 
