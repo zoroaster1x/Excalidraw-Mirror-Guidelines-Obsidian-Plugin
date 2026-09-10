@@ -1,0 +1,17 @@
+# vscode and editors
+.vscode
+.idea
+*.iml
+
+# dependencies
+node_modules
+
+# plugin runtime data
+data.json
+.hotreload
+
+# sourcemaps
+*.map
+
+# macos
+.DS_Store

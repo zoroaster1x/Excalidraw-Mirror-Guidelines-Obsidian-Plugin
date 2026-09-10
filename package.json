@@ -1,0 +1,24 @@
+{
+  "name": "excalidraw-mirror-plugin",
+  "version": "3.0.0",
+  "description": "Procedural mirror mode for Excalidraw: infinite draggable guides, radial symmetry, Ctrl+click mirroring, live mirrored drawing.",
+  "main": "main.js",
+  "author": "Zoroaster1x",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production",
+    "install-plugin": "bash install.sh",
+    "version": "node version-bump.mjs"
+  },
+  "keywords": [
+    "obsidian",
+    "excalidraw",
+    "mirror",
+    "symmetry",
+    "drawing"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "0.25.5"
+  }
+}

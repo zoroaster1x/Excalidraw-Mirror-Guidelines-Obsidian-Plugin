@@ -1,0 +1,9 @@
+{
+  "id": "excalidraw-mirror-plugin",
+  "name": "Excalidraw Mirror Plugin",
+  "version": "3.0.0",
+  "minAppVersion": "1.5.0",
+  "description": "Procedural mirror mode for Excalidraw: infinite draggable guides, radial symmetry, Ctrl+click mirroring, live mirrored drawing.",
+  "author": "Zoroaster1x",
+  "isDesktopOnly": false
+}

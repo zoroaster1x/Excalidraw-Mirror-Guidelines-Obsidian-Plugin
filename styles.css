@@ -1,0 +1,78 @@
+.emp-toolbar {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--island-bg-color, var(--background-primary, #ffffff));
+  color: var(--color-on-surface, #1b1b1f);
+  box-shadow:
+    0 0 0 1px var(--color-surface-low, rgba(0, 0, 0, 0.06)),
+    0 2px 10px rgba(0, 0, 0, 0.16);
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.emp-button {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  color: inherit;
+  line-height: 0;
+  cursor: pointer;
+}
+.emp-button:hover {
+  background: var(--color-surface-low, rgba(127, 127, 127, 0.14));
+}
+.emp-button.is-active {
+  background: var(--color-primary, var(--interactive-accent, #6965db));
+  color: var(--color-primary-contrast, #ffffff);
+}
+.emp-button svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.emp-overlay {
+  pointer-events: none;
+}
+
+.emp-guide-hit {
+  position: absolute;
+  height: 8px;
+  background: transparent;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  z-index: 3;
+  transform-origin: center center;
+}
+.emp-guide-hit:active {
+  cursor: grabbing;
+}
+
+.emp-guide-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: transparent;
+  cursor: crosshair;
+  pointer-events: auto;
+  touch-action: none;
+  z-index: 3;
+}
