@@ -2,14 +2,11 @@
 
 An Obsidian plugin for Excalidraw to give it mirror guidelines to mirror drawings and actions you take.
 
-Plugin id: `excalidraw-mirror-plugin`
-Plugin name in Obsidian: **Excalidraw Mirror Plugin**
-
 ## Why this plugin exists
 
-This was built for drawing anatomy notes. The author was drawing the iris of an eye in Excalidraw and had drawn dozens of short freehand muscle fibers along one half of the iris. The other half needed to match exactly, and doing that by hand (or with copy, flip and paste) was slow, inaccurate and frustrating.
+This was built for drawing anatomy notes. I was planning on drawing the iris of an eye in Excalidraw and past a few dozen of short freehand muscle fibers along one half of the iris I realised that Excalidraw really needed a feature to make this less tiresome. The other half needed to match exactly, and doing that by hand (or with copy, flip and paste) was slow, inaccurate and frustrating.
 
-Excalidraw has no mirror mode of its own, and none of the existing community scripts or companion plugins offered live symmetry. Vector tools like Krita and Procreate have mirror or symmetry drawing: you place an axis, draw on one side, and the other side is drawn with you. This plugin brings that workflow to Obsidian Excalidraw, as a companion plugin that works with the official Excalidraw plugin.
+Excalidraw has no mirror mode of its own, and I couldn't really find a community solution. Vector tools like Krita and Procreate have mirror or symmetry drawing: you place an axis, draw on one side, and the other side is drawn with you. This plugin brings that workflow to Obsidian Excalidraw, as a companion plugin that works with the official Excalidraw plugin.
 
 ## Features
 
@@ -18,9 +15,9 @@ Excalidraw has no mirror mode of its own, and none of the existing community scr
 - **Move and rotate guides.** Drag the dashed line to slide it (perpendicular to itself, which is the direction that changes the mirror), and drag the round handle to rotate it to any angle.
 - **Angle readout.** A small label at the guide center shows the current angle in degrees and updates live.
 - **Multiple guides and radial symmetry.** Add a second guide perpendicular to the first for 4 mirrored sectors, or at 45 degrees for up to 8 sectors. The plugin computes the full reflection group (up to 12 mirrored copies) so drawing in one sector fills the others.
-- **Ctrl+Click mirroring for existing elements.** With the selection tool active, Ctrl+Click (Cmd+Click on macOS) an existing element to place mirrored copies of it in every sector. Clicking again refreshes them instead of stacking duplicates.
+- **Ctrl+Click mirroring for existing elements.** Lets assume you were mid-project when downloading this plugin. You've already drawn a few dozen lines and don't wish to delete and then redraw them with a guide. Simple, you just add a guide and with the selection tool active, Ctrl+Click (Cmd+Click on macOS) an existing element to place mirrored copies of it on the opposite end of the guide. Clicking again refreshes them instead of stacking duplicates.
 - **Undo behavior setting.** Choose whether Ctrl+Z removes the stroke and its mirror together (default), or removes the mirrored copy first.
-- **Excalidraw menu integration.** The guide actions are added to Excalidraw's menu, directly under the Laser pointer item.
+- **Excalidraw menu integration.** The guide actions are added to Excalidraw's menu, just click on the 3 dots in the upper bar and you should see mirror options directly under the Laser pointer item.
 - **Commands and hotkeys.** Every action is also an Obsidian command, so you can bind hotkeys under Settings, Hotkeys.
 - **Theme aware UI.** The guide overlay, handles and labels follow the Excalidraw light or dark theme.
 - **Optional floating toolbar.** A small floating button can be shown inside the drawing view. It is off by default.
@@ -208,7 +205,7 @@ If you prefer not to bundle, `src/main.js` is valid CommonJS on its own. `instal
 
 ## Compatibility and privacy
 
-Tested with Obsidian 1.13.7 and the Excalidraw plugin 2.27.3 on desktop Linux. It uses only Obsidian and Excalidraw plugin APIs, so Windows and macOS should work as well.
+Tested with Obsidian 1.13.7 and the Excalidraw plugin 2.27.3 on Fedora Linux. It uses only Obsidian and Excalidraw plugin APIs, so Windows and macOS should work as well.
 
 The plugin is fully local. It has no network access, no telemetry and no external services.
 
